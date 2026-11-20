@@ -1584,6 +1584,29 @@ happen after the project is revised in Ekahau. **Reset to Auto**, then
 **Done**, returns that floor to Auto and keeps it there. The grid is stored on
 this computer beside the column grid file, not in the `.esx`.
 
+### Aiming cones
+
+A directional AP's marker can carry a cone that points the way its antenna is
+aimed. The cone is drawn from the **azimuth** stored in the project, so an AP
+whose antenna has no azimuth in the `.esx` cannot have one.
+
+- **AP Installation**: **Show aiming cones on directional APs**, on by default.
+- **AP Placement Map**: **Show aiming cones on directional APs**, off by
+  default.
+
+An antenna counts as directional when Ekahau labels it so, **or** when its
+stored pattern is a beam. Some wall-mount access points are labelled "not
+directional" in Ekahau's library although their pattern is a beam you can
+rotate; the report treats those as directional, lists them on the Antenna Aim
+Sheet and draws the cone along the orientation set in Ekahau. A pattern that is
+flat to within a few dB stays omni. The **Antenna specs reference** then shows a
+beam width measured from the pattern, marked with a leading `~`.
+
+When cones are on and some directional APs have no azimuth, a note under the
+map names them ("2 directional APs have no azimuth saved in the project…").
+Set the antenna direction in Ekahau, save, and run the report again. The
+**Antenna Aim Sheet** lists the same APs as *no azimuth*.
+
 ### Column grid references
 
 Crews locate everything off the building's column grid, so a reference such as

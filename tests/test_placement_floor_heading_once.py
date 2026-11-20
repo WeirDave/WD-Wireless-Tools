@@ -57,6 +57,7 @@ function placementKeyHtml() { return '<!--key-->'; }
 function orientPickerHtml(key) { return '<!--orient:' + key + '-->'; }
 function renderReportFooter() { return '<footer></footer>'; }
 function buildAntennaMarkers() { return ''; }
+function noConeNote() { return ''; }
 function renderAntennaSegmentCell(url, W, H, cell) {
   return '<!--cell:' + cell.col + ',' + cell.row + '-->';
 }

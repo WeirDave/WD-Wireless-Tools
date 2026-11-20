@@ -41,6 +41,8 @@ globalThis.WD = {
 // Only the marker drawing is stood in for; it has its own tests and needs
 // the whole AP context. Everything that decides what a sheet is runs for real.
 function buildAntennaMarkers(aps) { return '<!--markers:' + aps.length + '-->'; }
+// The note about APs with no cone needs the project; it has its own tests.
+function noConeNote() { return ''; }
 // The index letters are floored on the long edge by the shared map-label constant.
 const MAP_FONT_FLOOR_FRAC = 0.0165;
 eval(src.slice(a, b));

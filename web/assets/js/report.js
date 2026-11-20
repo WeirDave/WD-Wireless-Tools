@@ -1459,11 +1459,71 @@
     s = s.replace(/\s+/g, ' ').trim();
     return s.length > 24 ? s.slice(0, 23) + '\u2026' : s;
   }
+  /* What an antenna's stored radiation pattern says about it.
+
+     An .esx antenna type carries `hplane` (the pattern seen from above) and
+     `eplane` (from the side) as `{ alignmentAngle, gains: [{angle, gain}] }`.
+     It does not carry a beam width, and its `directional` flag is Ekahau's
+     library label rather than a measurement: the Aruba AP-679 Wide is flagged
+     `directional: false` with a 9 dBi peak, about 20 dB of front-to-back and a
+     half-power beam near 100 degrees. Trusting the flag alone filed that AP
+     under omni, so it never reached the Aim Sheet and never got a cone.
+
+     `spread` is the gap between the loudest and quietest direction in the
+     horizontal plane, `h3` / `v3` the arc around the peak that stays within
+     3 dB of it. An omni is flat to within a few dB and its arc is the whole
+     circle. Cached per antenna, since every table row asks. */
+  var patternCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function planeArc3dB(plane) {
+    var g = plane && plane.gains;
+    if (!Array.isArray(g) || g.length < 8) return null;
+    var pts = g.filter(function (e) {
+      return e && typeof e.angle === 'number' && typeof e.gain === 'number';
+    }).sort(function (x, y) { return x.angle - y.angle; });
+    var n = pts.length;
+    if (n < 8) return null;
+    var step = 360 / n, peak = 0, lo = Infinity;
+    pts.forEach(function (e, i) {
+      if (e.gain > pts[peak].gain) peak = i;
+      if (e.gain < lo) lo = e.gain;
+    });
+    var top = pts[peak].gain, floor = top - 3, count = 1, i;
+    for (i = 1; i < n && pts[(peak + i) % n].gain >= floor; i++) count++;
+    var back = 0;
+    for (i = 1; i < n - count + 1 && pts[(peak - i + n) % n].gain >= floor; i++) back++;
+    count += back;
+    return { arc: Math.min(360, count * step), spread: top - lo };
+  }
+  function patternSummary(ant) {
+    if (!ant || typeof ant !== 'object') return null;
+    if (patternCache && patternCache.has(ant)) return patternCache.get(ant);
+    var h = planeArc3dB(ant.hplane), v = planeArc3dB(ant.eplane);
+    var out = h ? { h3: h.arc, spread: h.spread, v3: v ? v.arc : null } : null;
+    if (patternCache) patternCache.set(ant, out);
+    return out;
+  }
   function antennaIsDirectional(ant) {
     if (!ant) return false;
     if (ant.directional === true) return true;
-    if (ant.directional === false) return false;
-    return !/omni/i.test(ant.name || '');
+    var byLabel = ant.directional === false ? false : !/omni/i.test(ant.name || '');
+    if (byLabel) return true;
+    // Ekahau's label says omni; the pattern may disagree.
+    var p = patternSummary(ant);
+    return !!(p && p.spread >= 10 && p.h3 <= 200);
+  }
+  /* The beam widths to print: the figures the file states, else, for a
+     directional antenna, the 3 dB arcs of its pattern. `derivedH` / `derivedV`
+     say which were measured here, so the table can mark them as approximate. */
+  function antennaBeam(a) {
+    var h = a.beamWidthHorizontal, v = a.beamWidthVertical, dh = false, dv = false;
+    if ((h == null || v == null) && antennaIsDirectional(a)) {
+      var p = patternSummary(a);
+      if (p) {
+        if (h == null && p.h3 != null) { h = Math.round(p.h3); dh = true; }
+        if (v == null && p.v3 != null) { v = Math.round(p.v3); dv = true; }
+      }
+    }
+    return { h: h, v: v, derivedH: dh, derivedV: dv };
   }
   // `antennas`: the project the radio belongs to, when it is not the open one.
   function radioIsDirectional(r, antennas) {
@@ -1494,7 +1554,9 @@
     });
     return Object.keys(used).some(function (id) {
       var a = (p.antennas || {})[id];
-      return a && (a.beamWidthHorizontal != null || a.beamWidthVertical != null);
+      if (!a) return false;
+      var b = antennaBeam(a);
+      return b.h != null || b.v != null;
     });
   }
 
@@ -1578,6 +1640,36 @@
         || directional[0];
     }
     return primaryRadio(apId);
+  }
+  /* The directional APs a map cannot draw a cone for: the antenna is
+     directional and the project holds no azimuth for it. The marker is still
+     the directional one, so a map with all of these on it read as "cones are
+     broken" - nothing on the sheet said the cone was missing because the
+     design never recorded which way the antenna points. Sorted the way an
+     installer reads names. */
+  function aimlessApNames(aps) {
+    var names = [];
+    (aps || []).forEach(function (ap) {
+      var r = aimRadio(ap.id);
+      if (r && antennaIsDirectional(proj.antennas[r.antennaTypeId]) && r.antennaDirection == null) {
+        names.push(ap.name || '(unnamed)');
+      }
+    });
+    return names.sort(function (x, y) { return x.localeCompare(y, undefined, { numeric: true }); });
+  }
+  /* The note under a map that is meant to carry cones, for the APs that
+     cannot. Empty when cones are off or every directional AP has an azimuth. */
+  function noConeNote(aps, opts) {
+    if (opts.showCones === false) return '';
+    var names = aimlessApNames(aps);
+    if (!names.length) return '';
+    var shown = names.slice(0, 12).map(WD.esc).join(', ');
+    var more = names.length > 12 ? ' and ' + (names.length - 12) + ' more' : '';
+    return '<div class="rep-overview-note">' + names.length + ' directional AP'
+      + (names.length === 1 ? ' has' : 's have')
+      + ' no azimuth saved in the project, so no aiming cone is drawn for '
+      + (names.length === 1 ? 'it' : 'them') + ': ' + shown + more
+      + '. Set the antenna direction in Ekahau and run the report again.</div>';
   }
   /* An azimuth as it should be read: 0 to 359.9, however the file stored it.
      A design can carry 450 or -45; printing those raw sent an installer to
@@ -2340,8 +2432,9 @@
       if (a.frequencyBand) bits.push(BAND_WORDS[a.frequencyBand] || a.frequencyBand);
       if (a.apCoupling) bits.push(a.apCoupling.replace(/_/g, ' ').toLowerCase());
       if (a.maxGain != null) bits.push(a.maxGain + ' dBi max gain');
-      if (a.beamWidthHorizontal != null) bits.push(a.beamWidthHorizontal + '° h-beam');
-      if (a.beamWidthVertical != null) bits.push(a.beamWidthVertical + '° v-beam');
+      var beam = antennaBeam(a);
+      if (beam.h != null) bits.push((beam.derivedH ? '~' : '') + beam.h + '° h-beam');
+      if (beam.v != null) bits.push((beam.derivedV ? '~' : '') + beam.v + '° v-beam');
       var countCell = hasCount
         ? '<td class="rep-num">' + plural(apCountMap[id] || 0, 'AP', 'APs') + '</td>'
         : '';
@@ -5582,10 +5675,19 @@
 
   function antennaKeyHtml(opts, aps, ctx) {
     var dirAps = [], omniAps = [];
+    /* Sorted by the radio the marker is drawn from, with the marker's own
+       test: a directional antenna is a directional marker whether or not the
+       design recorded an azimuth for it. The key asked primaryRadio and
+       needed the azimuth, so those APs were drawn as directional markers and
+       keyed under the omni swatch. */
     (aps || []).forEach(function (ap) {
-      if (ctx && radioIsDirectional(ctx.primaryRadio(ap.id))) dirAps.push(ap); else omniAps.push(ap);
+      var r = ctx ? aimRadio(ap.id) : null;
+      if (r && antennaIsDirectional(proj.antennas[r.antennaTypeId])) dirAps.push(ap); else omniAps.push(ap);
     });
-    return keySwatch('dir', dirAps) + ' Directional antenna &nbsp;·&nbsp; '
+    var coneHint = (opts.showCones !== false && dirAps.some(function (ap) {
+      var r = aimRadio(ap.id); return r && r.antennaDirection != null;
+    })) ? ' (the cone points the way it is aimed)' : '';
+    return keySwatch('dir', dirAps) + ' Directional antenna' + coneHint + ' &nbsp;·&nbsp; '
       + keySwatch('omni', omniAps) + ' Omni / ceiling &nbsp;·&nbsp; ' + WD.esc(antennaLabelHint(opts));
   }
 
@@ -5644,7 +5746,7 @@
 
     var stats = {};
     var markers = buildAntennaMarkers(aps, W, H, opts, ctx, null, stats);
-    var note = placementNotes(stats);
+    var note = placementNotes(stats) + noConeNote(aps, opts);
     return '<div class="rep-overview">'
       + '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
       +   '<img src="' + url + '" alt="Floor plan">'
@@ -5949,6 +6051,7 @@
         + ' outside the cropped area and ' + (outside.length === 1 ? 'is' : 'are')
         + ' not on these sheets: ' + WD.esc(outside.join(', ')) + '</div>';
     }
+    out += noConeNote(aps, opts);
     // The AP Placement Map already heads the page with this floor directly
     // above the index; a second heading here printed "Floor N" twice in a row.
     out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb, pageHeaded ? '' : segFloorHeading(opts));
@@ -11448,6 +11551,8 @@
           placeholder: 'e.g. Rev A' },
         { id: 'showChannelPower', label: 'Show channel & TX power columns', default: true,
           description: 'Adds per-radio TX power and channel columns to the AP table.' },
+        { id: 'showCones', label: 'Show aiming cones on directional APs', default: true,
+          description: 'A cone on each directional AP’s marker points the way its antenna is aimed. An AP whose project holds no azimuth cannot have one; the map names those APs underneath.' },
         { id: 'gridRef', type: 'check', label: 'Column grid reference', default: false,
           description: 'Adds a Grid column giving each AP its nearest column-grid intersection, such as C-4 — the coordinate system the crew on site already uses. Set the grid up first with the button below; until at least one floor is calibrated this does nothing.' },
         { id: '_gridRefSetup', type: 'gridref-button', label: 'Set up column grid…',
