@@ -4978,7 +4978,8 @@ function rowDetailHtml(r, stripe) {
       { quiet: true, writes: 'local',
         title: 'These matched on name alone. Taking the cloud copy over your local file makes them byte-identical, so the pair upgrades to Same file. Your local file is replaced by the cloud copy, which Ekahau still holds.' }));
     if (!sentences.length) {
-      sentences.push('Matched by name only — nothing has proved these are the same file.');
+      sentences.push('Matched by name only — nothing has proved these are the same file. '
+        + 'Download over local replaces your file with the cloud copy, so the two become identical.');
     }
   }
 
@@ -5567,7 +5568,12 @@ function cloudCell(r, localCodes) {
     if (isSites) {
       return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Create a cloud site from this folder" data-action="call" data-fn="createFromLocal" data-arg="${a(r.local.name)}">${ic('plus')}<span>Cloud site</span></button></div>`;
     }
-    return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Upload .esx to Ekahau Cloud" data-action="call" data-fn="uploadFromLocal" data-args-json="${a(JSON.stringify([np(r.local.path), r.local.name, r.parentSiteId || null]))}">${ic('up')}<span>Upload</span></button></div>`;
+    /* No Upload here. The band underneath carries it, in this same cloud lane,
+       with the sentence and the Link control - and this cell used to carry a
+       second, fainter one. Two Uploads for one file, in two rows, left him not
+       knowing which was the real one. A cloud-only project has always left its
+       empty local cell empty for the same reason, so the two orphans now match. */
+    return `<div class="lr-cell cloud empty${indentCls}">${chevron}</div>`;
   }
   const c = r.cloud, isMis = r.status === 'mismatch', thing = isSites ? 'cloud site' : 'cloud project';
   const me = ((data && data.currentUser) || '').toLowerCase();

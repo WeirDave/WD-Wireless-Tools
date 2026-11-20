@@ -140,8 +140,9 @@ out(res);
 
 @unittest.skipUnless(cloud_vm.HAVE_NODE, "node is not installed")
 class TheRowUploadAssignsToTheSite(unittest.TestCase):
-    """Both Upload controls on a local-only file inside a site's folder: the
-    ghost button in the empty cloud cell and the one in the detail band."""
+    """The Upload control on a local-only file inside a site's folder. There is
+    one - the detail band's. The empty cloud cell used to carry a second,
+    fainter one, and two Uploads for one file left him unsure which was real."""
 
     PROBE = SITES + DELEGATED_JS + r"""
 s.__set('currentTab', 'sites'); s.__set('data', SITES); s.indexRowData();
@@ -168,12 +169,12 @@ out({ found, uploads });
     def setUpClass(cls):
         cls.r = cloud_vm.run(cls.PROBE)
 
-    def test_both_controls_are_rendered(self):
-        self.assertEqual(2, len(self.r["found"]), self.r)
+    def test_exactly_one_upload_is_rendered(self):
+        self.assertEqual(1, len(self.r["found"]), self.r)
 
-    def test_each_uploads_into_the_site(self):
+    def test_it_uploads_into_the_site(self):
         path = "C:/w/Invented Main Campus (old)/Invented Annex.esx"
-        self.assertEqual([[path, "site-M"], [path, "site-M"]], self.r["uploads"], self.r)
+        self.assertEqual([[path, "site-M"]], self.r["uploads"], self.r)
 
 
 if __name__ == "__main__":  # pragma: no cover
