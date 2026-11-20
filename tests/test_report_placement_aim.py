@@ -549,14 +549,19 @@ class TheControls(ReportCase):
                      [{ n: 1, x: 300, y: 300 }]));
           E('(function () { currentReportId = "placement"; currentOpts = {}; })')();
           // Opened as it opens: the first floor's automatic grid in the dialog.
-          E('(function () { _gridCols = 3; _gridRows = 2; _gridInitCols = 3; _gridInitRows = 2; _cropBoxes = {}; _segMerges = {}; _cropBox = { x: 0, y: 0, w: 1, h: 1 }; _gridFloorIdx = 0; })')();
+          window.openGridConfig();
           window.doneGridConfig();
-          eq('nothing was changed, so nothing is stored', E('currentOpts.segCols'), undefined);
-          eq('rows too', E('currentOpts.segRows'), undefined);
-          // Now the person changes it.
-          E('(function () { _gridCols = 4; })')();
+          eq('nothing was changed, so nothing is stored', E('currentOpts.segGrids'), null);
+          eq('and no size for the whole project', E('currentOpts.segCols'), undefined);
+          // Now the person changes it, on the floor they are looking at.
+          window.openGridConfig();
+          const was = [E('_gridCols'), E('_gridRows')];
+          window.adjustGridCols(1);
           window.doneGridConfig();
-          eq('a change is stored', [E('currentOpts.segCols'), E('currentOpts.segRows')], [4, 2]);
+          eq('a change is stored, for that floor', E('currentOpts.segGrids'),
+             { f1: { cols: was[0] + 1, rows: was[1] } });
+          eq('and the other floor is left as it was', E('currentOpts.segGrids.f2'), undefined);
+          eq('still no size for the whole project', E('currentOpts.segCols'), undefined);
         """)
 
     def test_openGridConfig_remembers_what_it_opened_with(self):
@@ -569,7 +574,7 @@ class TheControls(ReportCase):
           try { window.openGridConfig(); } catch (e) { opened = false; }
           if (opened) {
             window.doneGridConfig();
-            eq('look, do not touch', E('currentOpts.segCols'), undefined);
+            eq('look, do not touch', E('currentOpts.segGrids') || undefined, undefined);
           }
         """)
 

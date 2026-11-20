@@ -146,7 +146,9 @@ class SegmentGrid(unittest.TestCase):
         src = REPORT_JS.read_text(encoding="utf-8")
         calls = [l for l in src.splitlines() if "computeAntennaGrid(" in l
                  and "function computeAntennaGrid" not in l]
-        self.assertGreaterEqual(len(calls), 4)
+        # The render, the contents page, and the grid dialog's one automatic
+        # count (autoGridFor). The dialog used to ask twice for itself.
+        self.assertGreaterEqual(len(calls), 3)
         for line in calls:
             with self.subTest(line=line.strip()):
                 self.assertIn("metersPerUnit", line)

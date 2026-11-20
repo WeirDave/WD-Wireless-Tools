@@ -417,6 +417,11 @@ def grids_for_project(project_id: str) -> dict:
 # own starts from - crops and combined cells are drawn on one project's plans
 # and are never carried to another.
 #
+# A size belongs to a floor ("segGrids", by floor id): a mezzanine is not cut
+# the way the slab under it is. The project-wide "cols" / "rows" an earlier
+# version saved is still read, and applies to any floor with no size of its
+# own; the page turns it into per-floor sizes the next time the grid is set.
+#
 # An entry with no size says "Auto" on purpose. Without it, choosing Auto on a
 # project would be forgotten at once, because a project with no entry falls
 # back to "last".
@@ -465,6 +470,14 @@ def _clean_size(cols, rows) -> dict | None:
     if not (1 <= c <= MAX_SECTION_LINES and 1 <= r <= MAX_SECTION_LINES):
         return None
     return {"cols": c, "rows": r}
+
+
+def _clean_floor_size(raw) -> dict | None:
+    """One floor's own columns and rows. A floor with nothing to say is
+    simply absent: it is automatic."""
+    if not isinstance(raw, dict):
+        return None
+    return _clean_size(raw.get("cols"), raw.get("rows"))
 
 
 def _clean_crop(raw) -> dict | None:
@@ -548,6 +561,9 @@ def save_section_grid(project_id: str, payload) -> dict:
     size = _clean_size(payload.get("segCols"), payload.get("segRows"))
     if size:
         entry.update(size)
+    floor_sizes = _clean_floor_map(payload.get("segGrids"), _clean_floor_size)
+    if floor_sizes:
+        entry["segGrids"] = floor_sizes
     crops = _clean_floor_map(payload.get("cropBoxes"), _clean_crop)
     if crops:
         entry["cropBoxes"] = crops

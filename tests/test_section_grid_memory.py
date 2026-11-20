@@ -67,16 +67,28 @@ async function esx(p, id, name) {
     arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length) };
 }
 async function openProject(id, name) { await E('loadFile')(await esx(project(), id, name)); }
-// What the grid dialog holds when the person presses Done: the dialog's own
-// state is private to the page, so it is set the way the dialog sets it.
+// The real dialog: opened, the +/- buttons pressed until the numbers read what
+// a test wants, Reset to Auto where it asks for that, and Done. Only the crop
+// and the combined cells are put in directly, because they are drawn by
+// dragging on a canvas. `floor` is the index of the floor the numbers are for.
 function inDialog(state) {
-  E('(function (s) { _gridFloorIdx = 0; _gridCols = s.cols; _gridRows = s.rows;'
-    + ' _gridInitCols = 0; _gridInitRows = 0; _gridAutoReset = !!s.auto;'
-    + ' _cropBoxes = s.crops || {}; _segMerges = s.merges || {};'
-    + ' var c = (s.crops || {})[proj.floorPlans[0].id];'
-    + ' _cropBox = c ? { x: c.x, y: c.y, w: c.w, h: c.h } : { x: 0, y: 0, w: 1, h: 1 }; })')(state);
+  window.openGridConfig();
+  const at = (state.floor || 0);
+  if (at) window.gridFloorPick(at);
+  if (state.auto) window.resetGridToAuto();
+  if (state.cols) {
+    while (E('_gridCols') !== state.cols) window.adjustGridCols(E('_gridCols') < state.cols ? 1 : -1);
+    while (E('_gridRows') !== state.rows) window.adjustGridRows(E('_gridRows') < state.rows ? 1 : -1);
+  }
+  if (state.crops || state.merges) {
+    E('(function (s) { _cropBoxes = s.crops || {}; _segMerges = s.merges || {};'
+      + ' var c = (s.crops || {})[proj.floorPlans[_gridFloorIdx].id];'
+      + ' _cropBox = c ? { x: c.x, y: c.y, w: c.w, h: c.h } : { x: 0, y: 0, w: 1, h: 1 }; })')(state);
+  }
+  (state.then || []).forEach(function (f) { f(); });
   window.doneGridConfig();
 }
+const FA_4x3 = { fA: { cols: 4, rows: 3 } };
 const CROP_ALL_APS = { x: 0.05, y: 0.05, w: 0.9, h: 0.9 };
 const CROP_CUTS_APS = { x: 0, y: 0, w: 0.5, h: 0.5 };
 const MERGE = { cols: 4, rows: 3, groups: [{ c0: 0, r0: 0, c1: 1, r1: 0 }] };
@@ -134,13 +146,13 @@ class TheGridSurvivesSwitchingReport(MemoryCase):
           inDialog({ cols: 4, rows: 3, crops: { fA: CROP_ALL_APS }, merges: { fA: MERGE } });
           window.selectReport('aim');
           let o = E('collectOpts()');
-          eq('size on the next report', [o.segCols, o.segRows], [4, 3]);
+          eq('size on the next report', o.segGrids, FA_4x3);
           eq('crop on the next report', o.cropBoxes, { fA: CROP_ALL_APS });
           eq('combined cells on the next report', o.segMerges, { fA: MERGE });
           window.selectReport('placement');
           o = E('collectOpts()');
-          eq('and back again', [o.segCols, o.segRows], [4, 3]);
-          eq('the sidebar button reads the size', /4 × 3/.test(
+          eq('and back again', o.segGrids, FA_4x3);
+          eq('the sidebar button says the floors differ', /Per floor/.test(
             E('renderOptHtml')({ type: 'grid-button', label: 'Section grid' })), true);
         """)
 
@@ -151,7 +163,7 @@ class TheGridSurvivesSwitchingReport(MemoryCase):
           window.selectReport('placement');
           inDialog({ cols: 5, rows: 2 });
           window.selectReport('aim');
-          eq('size on the next report', [E('collectOpts()').segCols, E('collectOpts()').segRows], [5, 2]);
+          eq('size on the next report', E('collectOpts()').segGrids, { fA: { cols: 5, rows: 2 } });
         """, server="down")
 
 
@@ -171,7 +183,9 @@ class TheGridSurvivesReopeningTheFile(MemoryCase):
           await openProject(ALPHA, 'Invented Alpha');
           window.selectReport('placement');
           const o = E('collectOpts()');
-          eq('size', [o.segCols, o.segRows], [4, 3]);
+          eq('size', o.segGrids, FA_4x3);
+          check('and it is the floor\'s own, not the whole project\'s',
+                !('segCols' in o) && !('segRows' in o));
           eq('crop', o.cropBoxes, { fA: CROP_ALL_APS });
           eq('combined cells', o.segMerges, { fA: MERGE });
           check('the panel says it was filled in for them',
@@ -180,11 +194,14 @@ class TheGridSurvivesReopeningTheFile(MemoryCase):
         """)
 
     def test_a_new_project_starts_from_the_last_size_and_nothing_else(self):
-        self.remember(self.page(r"""
-          await openProject(ALPHA, 'Invented Alpha');
-          window.selectReport('placement');
-          inDialog({ cols: 4, rows: 3, crops: { fA: CROP_ALL_APS }, merges: { fA: MERGE } });
-        """))
+        """The last size is a project-wide one, which is what versions before
+        per-floor sizes saved. The grid dialog no longer writes one - a size
+        set on a mezzanine says nothing about the next project's floors - but
+        what is already remembered still seeds a project that has no entry."""
+        self.remember([{"projectId": ALPHA, "segCols": 4, "segRows": 3,
+                        "cropBoxes": {"fA": dict(x=0.05, y=0.05, w=0.9, h=0.9)},
+                        "segMerges": {"fA": {"cols": 4, "rows": 3, "groups": [
+                            {"c0": 0, "r0": 0, "c1": 1, "r1": 0}]}}}])
         self.page(r"""
           await openProject(BETA, 'Invented Beta');
           window.selectReport('placement');
@@ -230,27 +247,26 @@ class TheGridSurvivesReopeningTheFile(MemoryCase):
 class AutoIsAChoiceThatSticks(MemoryCase):
 
     def test_resetting_to_auto_is_remembered_and_is_not_the_last_size(self):
-        self.remember(self.page(r"""
-          await openProject(ALPHA, 'Invented Alpha');
-          window.selectReport('placement');
-          inDialog({ cols: 4, rows: 3 });
-        """))
+        self.remember([{"projectId": ALPHA, "segCols": 4, "segRows": 3}])
         saves = self.page(r"""
           await openProject(BETA, 'Invented Beta');
           window.selectReport('placement');
           eq('it started from the last size', E('collectOpts()').segCols, 4);
-          // Reset to Auto in the dialog, then Done.
-          inDialog({ cols: 2, rows: 2, auto: true });
-          check('the size is cleared, not written down as 2 x 2',
-                !('segCols' in E('collectOpts()')));
+          // Reset to Auto on each floor in the dialog, then Done.
+          inDialog({ auto: true, then: [() => { window.gridFloorPick(1); window.resetGridToAuto(); }] });
+          const o = E('collectOpts()');
+          check('no size is written down for either floor',
+                !('segGrids' in o) && !('segCols' in o) && !('segRows' in o));
         """)
-        self.assertNotIn("segCols", saves[-1])
+        for key in ("segCols", "segRows", "segGrids"):
+            self.assertFalse(saves[-1].get(key), key)
         self.remember(saves)
         self.page(r"""
           await openProject(BETA, 'Invented Beta');
           window.selectReport('placement');
+          const o = E('collectOpts()');
           check('Auto came back as Auto and not as the last size',
-                !('segCols' in E('collectOpts()')));
+                !('segCols' in o) && !('segGrids' in o));
         """)
 
 
@@ -271,6 +287,16 @@ class ACropIsNotAppliedBlindly(MemoryCase):
           check('and the person is told', toasts.some(t => /not applied/.test(t.msg)));
         """)
 
+    def test_a_size_for_a_floor_that_no_longer_exists_is_ignored(self):
+        self.remember([{"projectId": ALPHA,
+                        "segGrids": {"fA": {"cols": 4, "rows": 3},
+                                     "fGone": {"cols": 2, "rows": 2}}}])
+        self.page(r"""
+          await openProject(ALPHA, 'Invented Alpha');
+          window.selectReport('placement');
+          eq('only the floor that is there', E('collectOpts()').segGrids, FA_4x3);
+        """)
+
     def test_a_crop_on_a_floor_that_no_longer_exists_is_ignored(self):
         self.remember([{"projectId": ALPHA, "segCols": 4, "segRows": 3,
                         "cropBoxes": {"fGone": {"x": 0.1, "y": 0.1, "w": 0.5, "h": 0.5}}}])
@@ -283,14 +309,14 @@ class ACropIsNotAppliedBlindly(MemoryCase):
     def test_combined_cells_for_a_different_grid_are_not_applied(self):
         """They are cut from one grid and mean nothing on another. The page
         never sends this pair; a hand-edited or older file could hold it."""
-        self.remember([{"projectId": ALPHA, "segCols": 5, "segRows": 5,
+        self.remember([{"projectId": ALPHA, "segGrids": {"fA": {"cols": 5, "rows": 5}},
                         "segMerges": {"fA": {"cols": 4, "rows": 3,
                                              "groups": [{"c0": 0, "r0": 0, "c1": 1, "r1": 0}]}}}])
         self.page(r"""
           await openProject(ALPHA, 'Invented Alpha');
           window.selectReport('placement');
           const o = E('collectOpts()');
-          eq('the size was applied', [o.segCols, o.segRows], [5, 5]);
+          eq('the size was applied', o.segGrids, { fA: { cols: 5, rows: 5 } });
           check('combined cells not applied to a grid they were not cut from',
                 !('segMerges' in o));
         """)

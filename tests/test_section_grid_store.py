@@ -69,6 +69,21 @@ class SectionGridStorage(Isolated):
         self.assertEqual(got["cropBoxes"], {FLOOR_A: CROP})
         self.assertEqual(got["segMerges"], {FLOOR_A: MERGE})
 
+    def test_each_floors_own_size_round_trips(self):
+        report_store.save_section_grid(PROJECT, {
+            "segGrids": {FLOOR_A: {"cols": 4, "rows": 3}, FLOOR_B: {"cols": 2, "rows": 1}}})
+        got = report_store.section_grid_for_project(PROJECT)["project"]
+        self.assertEqual(got["segGrids"], {FLOOR_A: {"cols": 4, "rows": 3},
+                                           FLOOR_B: {"cols": 2, "rows": 1}})
+        self.assertNotIn("cols", got, "a per-floor size became a project-wide one")
+
+    def test_a_floors_size_does_not_become_the_last_size(self):
+        """A mezzanine's 2 x 1 says nothing about the next project's floors."""
+        report_store.save_section_grid(PROJECT, a_grid())
+        report_store.save_section_grid(OTHER, {"segGrids": {FLOOR_B: {"cols": 2, "rows": 1}}})
+        self.assertEqual(report_store.section_grid_for_project(OTHER)["last"],
+                         {"cols": 4, "rows": 3})
+
     def test_projects_are_kept_apart(self):
         report_store.save_section_grid(PROJECT, a_grid())
         report_store.save_section_grid(OTHER, a_grid(segCols=2, segRows=2,
@@ -148,6 +163,23 @@ class SectionGridRefusals(Isolated):
             with self.subTest(cols=cols, rows=rows):
                 got = self.saved(segCols=cols, segRows=rows)
                 self.assertNotIn("cols", got)
+
+    def test_a_floors_size_is_cleaned_like_the_project_wide_one(self):
+        res = self.saved(segCols=None, segRows=None, cropBoxes=None, segMerges=None,
+                         segGrids={"good": {"cols": 3, "rows": 2},
+                                   "zero": {"cols": 0, "rows": 2},
+                                   "huge": {"cols": 4, "rows": 21},
+                                   "flag": {"cols": True, "rows": 2},
+                                   "text": {"cols": "wide", "rows": 2},
+                                   "bare": "3x2",
+                                   "none": None,
+                                   "": {"cols": 3, "rows": 2}})
+        self.assertEqual(res["segGrids"], {"good": {"cols": 3, "rows": 2}})
+
+    def test_a_floor_size_that_is_not_a_map_is_dropped(self):
+        for junk in ("3x2", [3, 2], 7, True):
+            with self.subTest(junk=junk):
+                self.assertNotIn("segGrids", self.saved(segGrids=junk))
 
     def test_the_size_needs_both_numbers(self):
         self.assertNotIn("cols", self.saved(segRows=None))

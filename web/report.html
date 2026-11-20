@@ -337,25 +337,25 @@
           <dt>1. Position the grid</dt>
           <dd>Drag the blue box over the building area. Drag corners or edges to resize it.</dd>
           <dt>2. Fine-tune (optional)</dt>
-          <dd>Scroll to zoom in for precise placement. Hold <kbd>Space</kbd> and drag to pan &mdash; anywhere, including over the blue box. Middle-drag and right-drag do the same, and plain dragging outside the box still pans. Adjust columns &amp; rows with +/&minus; if needed &mdash; auto-calculated by default.</dd>
+          <dd>Scroll to zoom in for precise placement. Hold <kbd>Space</kbd> and drag to pan &mdash; anywhere, including over the blue box. Middle-drag and right-drag do the same, and plain dragging outside the box still pans. Adjust columns &amp; rows with +/&minus; if needed &mdash; auto-calculated by default. Columns and rows belong to the floor on screen, so each floor can have its own: a mezzanine does not have to be cut like the floor under it.</dd>
           <dt>Combine cells (optional)</dt>
-          <dd>For an open area the grid cuts through &mdash; a warehouse in one leg of an L-shaped building, say &mdash; click <strong>Combine cells</strong>, click the cells to join, then <strong>Combine selected</strong>. They print as one section on one sheet. A full column top to bottom is named by its letter, so A1 and A2 become <strong>A</strong>. Cells have to make a rectangle. Click a combined section and <strong>Split</strong> to undo it. Changing the number of columns or rows clears combined sections.</dd>
+          <dd>For an open area the grid cuts through &mdash; a warehouse in one leg of an L-shaped building, say &mdash; click <strong>Combine cells</strong>, click the cells to join, then <strong>Combine selected</strong>. They print as one section on one sheet. A full column top to bottom is named by its letter, so A1 and A2 become <strong>A</strong>. Cells have to make a rectangle. Click a combined section and <strong>Split</strong> to undo it. Changing the number of columns or rows on a floor clears that floor&rsquo;s combined sections.</dd>
           <dt>3. Apply</dt>
           <dd>Click <strong>Apply</strong> to save this floor&rsquo;s grid.</dd>
           <dt>4. Additional floors</dt>
-          <dd>Click <strong>Apply to All Floors</strong> to copy the grid position to every floor. Then switch floors from the list on the left (a dropdown above the plan when a project has more than 20) and adjust the grid on each floor if the images aren&rsquo;t aligned. Only the floors chosen under <strong>Floors to include</strong> are listed and changed.</dd>
+          <dd>Click <strong>Apply to All Floors</strong> to copy this floor&rsquo;s grid position, columns and rows, and combined sections to every floor. Then switch floors from the list on the left (a dropdown above the plan when a project has more than 20) and adjust the grid on each floor if the images aren&rsquo;t aligned. Only the floors chosen under <strong>Floors to include</strong> are listed and changed.</dd>
           <dt>5. Finish</dt>
           <dd>Click <strong>Done</strong> to apply and close.</dd>
         </dl>
       </div>
     </div>
     <div class="grid-modal-footer">
-      <button class="btn btn-secondary btn-sm" data-action="call" data-fn="resetGridToAuto">Reset to Auto</button>
+      <button class="btn btn-secondary btn-sm" data-action="call" data-fn="resetGridToAuto" title="Puts this floor back to its automatic columns and rows, and clears its crop and combined sections. Other floors are not changed.">Reset to Auto</button>
       <button class="btn btn-secondary btn-sm" data-action="call" data-fn="resetCropBox">Reset Grid</button>
       <button class="btn btn-secondary btn-sm" data-action="call" data-fn="resetGridZoom">Reset Zoom</button>
       <div class="grid-modal-actions">
         <button class="btn btn-secondary btn-sm" data-action="call" data-fn="closeGridConfig">Cancel</button>
-        <button class="btn btn-secondary btn-sm" data-action="call" data-fn="applyGridFloor" data-arg-json="true" title="Copies this crop position to every floor plan. If floors use different image positions, check each floor afterward and adjust.">Apply to All Floors</button>
+        <button class="btn btn-secondary btn-sm" data-action="call" data-fn="applyGridFloor" data-arg-json="true" title="Copies this floor's crop position, columns and rows, and combined sections to every floor plan. If floors use different image positions, check each floor afterward and adjust.">Apply to All Floors</button>
         <button class="btn btn-secondary btn-sm" data-action="call" data-fn="applyGridFloor" data-arg-json="false">Apply</button>
         <button class="btn btn-primary btn-sm" data-action="call" data-fn="doneGridConfig">Done</button>
       </div>

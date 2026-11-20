@@ -1151,7 +1151,7 @@
     folderLookup = (res && res.reason) || 'failed';
   }
 
-  var PER_PROJECT_OPTS = ['segCols', 'segRows', 'cropBoxes', 'segMerges'];
+  var PER_PROJECT_OPTS = ['segCols', 'segRows', 'segGrids', 'cropBoxes', 'segMerges'];
 
   async function loadFile(file, folderName) {
     if (!file.name.toLowerCase().endsWith('.esx')) {
@@ -2984,11 +2984,20 @@
     var reason = disabled && opt.disabledReason ? opt.disabledReason(proj) : '';
     if (reason) desc = (desc ? desc + ' ' : '') + '— ' + reason;
     if (opt.type === 'grid-button') {
-      var gc = (currentOpts.segCols || '') + '';
-      var gr = (currentOpts.segRows || '') + '';
-      var gridLabel = (gc && gr) ? gc + ' × ' + gr : 'Auto';
       var scopeIds = {};
       floorsInScope().forEach(function (x) { scopeIds[x.fp.id] = true; });
+      /* One size on every floor reads as that size, none set reads as Auto,
+         and anything between is "Per floor": the button cannot name one
+         number for floors that have several. */
+      var sizes = Object.keys(scopeIds).map(function (id) {
+        return floorGridSize(currentOpts, id);
+      });
+      var fixed = sizes.filter(Boolean);
+      var gridLabel = !fixed.length ? 'Auto'
+        : (fixed.length === sizes.length && fixed.every(function (z) {
+            return z.cols === fixed[0].cols && z.rows === fixed[0].rows;
+          })) ? fixed[0].cols + ' × ' + fixed[0].rows
+        : 'Per floor';
       var inScope = function (map) {
         return Object.keys(map || {}).some(function (id) { return scopeIds[id]; });
       };
@@ -3937,9 +3946,6 @@
   var _sectionMemory = { project: null, last: null };
   // What the options panel tells the person was filled in without their asking.
   var _gridMemoryNote = '';
-  // Reset to Auto was pressed and nothing changed it since: Done then clears
-  // the size instead of writing the auto numbers down as a choice.
-  var _gridAutoReset = false;
 
   async function loadSectionMemory() {
     _sectionMemory = { project: null, last: null };
@@ -3964,6 +3970,18 @@
     if (!mine) return;
     var floors = {};
     proj.floorPlans.forEach(function (f) { floors[f.id] = f; });
+    if (mine.segGrids && !currentOpts.segGrids) {
+      var grids = {};
+      Object.keys(mine.segGrids).forEach(function (id) {
+        var g = mine.segGrids[id];
+        if (!floors[id] || !g) return;
+        grids[id] = { cols: g.cols, rows: g.rows };
+      });
+      if (Object.keys(grids).length) {
+        currentOpts.segGrids = grids;
+        _gridMemoryNote = 'Remembered for this project.';
+      }
+    }
     var skipped = [];
     if (mine.cropBoxes && !currentOpts.cropBoxes) {
       var crops = {};
@@ -3984,7 +4002,8 @@
       Object.keys(mine.segMerges).forEach(function (id) {
         var m = mine.segMerges[id];
         if (!floors[id] || !m) return;
-        if (m.cols !== currentOpts.segCols || m.rows !== currentOpts.segRows) return;
+        var own = floorGridSize(currentOpts, id);
+        if (!own || m.cols !== own.cols || m.rows !== own.rows) return;
         if (!segMergeGroups(m, m.cols, m.rows).length) return;
         merges[id] = JSON.parse(JSON.stringify(m));
       });
@@ -4011,13 +4030,14 @@
       entry.rows = o.segRows;
       _sectionMemory.last = { cols: o.segCols, rows: o.segRows };
     }
+    if (o.segGrids) entry.segGrids = JSON.parse(JSON.stringify(o.segGrids));
     if (o.cropBoxes) entry.cropBoxes = JSON.parse(JSON.stringify(o.cropBoxes));
     if (o.segMerges) entry.segMerges = JSON.parse(JSON.stringify(o.segMerges));
     _sectionMemory.project = Object.keys(entry).length ? entry
       : (_sectionMemory.last ? { auto: true } : null);
     WD.api('report/sections/save', {
       projectId: proj.projectId,
-      segCols: o.segCols, segRows: o.segRows,
+      segCols: o.segCols, segRows: o.segRows, segGrids: o.segGrids,
       cropBoxes: o.cropBoxes, segMerges: o.segMerges,
     }).then(function (res) {
       if (res && res.ok) _sectionMemory = { project: res.project || null, last: res.last || null };
@@ -4073,8 +4093,19 @@
   }
 
   var _gridCols = 0, _gridRows = 0, _gridFloorIdx = 0;
-  // What the dialog opened with, so Done can tell a change from a look.
-  var _gridInitCols = 0, _gridInitRows = 0;
+  /* Columns and rows belong to a floor. A mezzanine over part of the slab is
+     not cut the way the floor under it is, so the dialog keeps each floor's
+     own size here, {cols, rows}. A floor with no entry is automatic.
+     `_gridCols` / `_gridRows` are the numbers on screen for the floor being
+     shown.
+
+     A project can still arrive with one size for every floor - saved by an
+     earlier version, or started from the last size set elsewhere. Opening the
+     dialog turns that into each floor's own size, so nothing changes on any
+     floor until the person changes it, and Done then writes only per-floor
+     sizes. Without that, "Reset to Auto" on one floor would have had to mean
+     "on this floor, but not on the others the old size still covers". */
+  var _segGrids = {};
   var _cropBox = { x: 0, y: 0, w: 1, h: 1 };
   var _cropBoxes = {};
   var _dragState = null;
@@ -4097,13 +4128,14 @@
     if (!scoped.length) { alert('No floors are included in this report.'); return; }
     _gridFloorIdx = scoped[0].idx;
     var fp = scoped[0].fp;
-    var aps = filterApsForFloor(fp);
-    var auto = computeAntennaGrid(fp.width, fp.height, aps, {}, fp.metersPerUnit);
-    _gridCols = (currentOpts.segCols > 0) ? currentOpts.segCols : auto.cols;
-    _gridRows = (currentOpts.segRows > 0) ? currentOpts.segRows : auto.rows;
-    _gridInitCols = _gridCols;
-    _gridInitRows = _gridRows;
-    _gridAutoReset = false;
+    _segGrids = JSON.parse(JSON.stringify(currentOpts.segGrids || {}));
+    var projectWide = floorGridSize({ segCols: currentOpts.segCols, segRows: currentOpts.segRows });
+    if (projectWide) {
+      (proj.floorPlans || []).forEach(function (f) {
+        if (!_segGrids[f.id]) _segGrids[f.id] = { cols: projectWide.cols, rows: projectWide.rows };
+      });
+    }
+    showFloorGrid(fp);
     _cropBoxes = {};
     var saved = currentOpts.cropBoxes || {};
     (proj.floorPlans || []).forEach(function (f) {
@@ -4132,6 +4164,50 @@
     modal.hidden = false;
   };
 
+  function floorById(id) {
+    return (proj.floorPlans || []).filter(function (f) { return f.id === id; })[0] || null;
+  }
+
+  // What the plan would be cut into with nobody having said.
+  function autoGridFor(fp) {
+    return computeAntennaGrid(fp.width, fp.height, filterApsForFloor(fp), {}, fp.metersPerUnit);
+  }
+
+  // What a floor is cut into as the dialog stands.
+  function dialogGridFor(fp) {
+    return floorGridSize({ segGrids: _segGrids }, fp.id) || autoGridFor(fp);
+  }
+
+  function showFloorGrid(fp) {
+    var g = dialogGridFor(fp);
+    _gridCols = g.cols;
+    _gridRows = g.rows;
+  }
+
+  /* Called after the numbers on screen were changed by the person. A size that
+     is the same as what the floor would get anyway is not a choice and is not
+     stored, so opening the dialog, nudging a number and putting it back leaves
+     the floor automatic rather than frozen at today's count. */
+  function recordGridChange(fp) {
+    var base = autoGridFor(fp);
+    if (base.cols === _gridCols && base.rows === _gridRows) delete _segGrids[fp.id];
+    else _segGrids[fp.id] = { cols: _gridCols, rows: _gridRows };
+  }
+
+  /* A combined section is cut from one particular grid, so a floor that has
+     any is held at the size it was combined on rather than left to follow
+     the automatic count, which moves when APs do. */
+  function pinMergedFloors() {
+    Object.keys(_segMerges).forEach(function (id) {
+      var fp = floorById(id);
+      if (!fp || _segGrids[id]) return;
+      var g = dialogGridFor(fp);
+      if (segMergeGroups(_segMerges[id], g.cols, g.rows).length) {
+        _segGrids[id] = { cols: g.cols, rows: g.rows };
+      }
+    });
+  }
+
   function filterApsForFloor(fp) {
     return (proj.accessPoints || []).filter(function (ap) {
       return ap.location && ap.location.floorPlanId === fp.id;
@@ -4144,6 +4220,7 @@
     _mergeSel = {};
     _gridZoom = 1; _gridPanX = 0; _gridPanY = 0;
     var newFp = proj.floorPlans[_gridFloorIdx];
+    if (newFp) showFloorGrid(newFp);
     var fc = newFp && _cropBoxes[newFp.id];
     _cropBox = fc ? { x: fc.x, y: fc.y, w: fc.w, h: fc.h } : { x: 0, y: 0, w: 1, h: 1 };
     updateGridPreview();
@@ -4157,14 +4234,14 @@
   };
 
   window.adjustGridCols = function (delta) {
-    _gridAutoReset = false;
     _gridCols = Math.max(1, Math.min(20, _gridCols + delta));
+    recordGridChange(proj.floorPlans[_gridFloorIdx]);
     updateGridPreview();
   };
 
   window.adjustGridRows = function (delta) {
-    _gridAutoReset = false;
     _gridRows = Math.max(1, Math.min(20, _gridRows + delta));
+    recordGridChange(proj.floorPlans[_gridFloorIdx]);
     updateGridPreview();
   };
 
@@ -4192,9 +4269,10 @@
     document.getElementById('gridColsVal').textContent = _gridCols;
     document.getElementById('gridRowsVal').textContent = _gridRows;
     document.getElementById('gridCellCount').textContent =
-      _gridCols * _gridRows + ' cells'
+      _gridCols + ' \u00d7 ' + _gridRows + ' grid on this floor: '
+      + _gridCols * _gridRows + ' cells'
       + (groups.length ? ' in ' + sectionCount + ' sections' : '')
-      + ', ' + aps.length + ' APs on this floor';
+      + ', ' + aps.length + ' APs';
     var cropWarn = document.getElementById('gridCropWarn');
     if (cropWarn) {
       var left = outsideCropNames(apsOutsideCrop(aps, W, H, _cropBox));
@@ -4576,9 +4654,9 @@
     var aspect = cropW / cropH;
     var newCols = Math.max(1, Math.round(Math.sqrt(totalCells * aspect)));
     var newRows = Math.max(1, Math.round(totalCells / newCols));
-    _gridAutoReset = false;
     _gridCols = newCols;
     _gridRows = newRows;
+    recordGridChange(fp);
     updateGridPreview();
   }
 
@@ -4607,13 +4685,27 @@
       }
       var here = (proj.floorPlans[_gridFloorIdx] || {}).id;
       var merge = here && _segMerges[here];
+      /* Columns and rows go with it. They are each floor's own, so a copy of
+         this floor's combined sections is only worth anything on a floor cut
+         the same way, and "apply to all" is read as "make them all like this
+         one". A floor with no size of its own passes that on too. */
+      pinMergedFloors();
+      var size = here && _segGrids[here];
       Object.keys(_segMerges).forEach(function (id) { if (inScope[id]) delete _segMerges[id]; });
+      fps.forEach(function (f) {
+        if (size) _segGrids[f.id] = JSON.parse(JSON.stringify(size));
+        else delete _segGrids[f.id];
+      });
       if (merge) {
         fps.forEach(function (f) {
           _segMerges[f.id] = JSON.parse(JSON.stringify(merge));
         });
       }
-      var msg = 'Crop' + (merge ? ' and combined sections' : '')
+      var what = ['Crop'];
+      if (size) what.push('columns and rows');
+      if (merge) what.push('combined sections');
+      var msg = (what.length < 3 ? what.join(' and ')
+          : what[0] + ', ' + what[1] + ' and ' + what[2])
         + ' applied to all ' + fps.length + ' floor' + (fps.length === 1 ? '' : 's') + '.';
       if (fps.length > 1) msg += ' Check each floor — images may not be aligned.';
       // The crop was drawn on one floor; on the others it can cut APs off
@@ -4640,25 +4732,17 @@
 
   window.doneGridConfig = function () {
     saveCurrentFloorCrop();
-    /* Columns and rows are one setting for every floor, and the dialog opens
-       showing the FIRST floor's automatic grid. Writing it back unconditionally
-       turned opening the dialog and pressing Done into a decision: a floor the
-       automatic count kept to one sheet became six sections. Only a grid the
-       person actually changed is stored. */
-    // Combined sections are cut from that grid, so they pin it too.
-    var pinsGrid = Object.keys(_segMerges).some(function (id) {
-      return segMergeGroups(_segMerges[id], _gridCols, _gridRows).length;
-    });
-    if (_gridAutoReset) {
-      /* Auto is a choice that has to be able to stick: written down as the
-         numbers Auto happened to give, it would be remembered as a fixed
-         size and applied to the next project. */
-      delete currentOpts.segCols;
-      delete currentOpts.segRows;
-    } else if (_gridCols !== _gridInitCols || _gridRows !== _gridInitRows || pinsGrid) {
-      currentOpts.segCols = _gridCols;
-      currentOpts.segRows = _gridRows;
-    }
+    /* Only a size the person changed is stored, and only for the floor they
+       changed it on (see _segGrids). Writing the numbers on screen back
+       unconditionally turned opening the dialog and pressing Done into a
+       decision: a floor the automatic count kept to one sheet became six
+       sections. Combined sections are cut from a grid, so they pin it. */
+    pinMergedFloors();
+    currentOpts.segGrids = Object.keys(_segGrids).length ? _segGrids : null;
+    // Carried into segGrids when the dialog opened; kept, it would be a second
+    // answer to the same question for any floor that Reset to Auto cleared.
+    delete currentOpts.segCols;
+    delete currentOpts.segRows;
     currentOpts.cropBoxes = Object.keys(_cropBoxes).length ? _cropBoxes : null;
     pruneStaleMerges();
     currentOpts.segMerges = Object.keys(_segMerges).length ? _segMerges : null;
@@ -4674,11 +4758,12 @@
 
   window.resetGridToAuto = function () {
     var fp = proj.floorPlans[_gridFloorIdx];
-    var aps = filterApsForFloor(fp);
-    var auto = computeAntennaGrid(fp.width, fp.height, aps, {}, fp.metersPerUnit);
+    var auto = autoGridFor(fp);
     _gridCols = auto.cols;
     _gridRows = auto.rows;
-    _gridAutoReset = true;
+    // Nothing is stored for an automatic floor, so it is not remembered as
+    // the numbers Auto happened to give.
+    delete _segGrids[fp.id];
     _cropBox = { x: 0, y: 0, w: 1, h: 1 };
     if (fp) delete _cropBoxes[fp.id];
     if (fp) delete _segMerges[fp.id];
@@ -4686,14 +4771,16 @@
     updateGridPreview();
   };
 
-  // Columns and rows are one setting for every floor, so a change of shape
-  // retires every floor's combined sections, not just this one's.
+  // A floor's combined sections are cut from that floor's own grid, so a
+  // change of shape retires that floor's and leaves every other floor's alone.
   function pruneStaleMerges() {
     var dropped = false;
     Object.keys(_segMerges).forEach(function (id) {
       var m = _segMerges[id];
-      if (!m || m.cols !== _gridCols || m.rows !== _gridRows
-          || !segMergeGroups(m, _gridCols, _gridRows).length) {
+      var fp = floorById(id);
+      var g = fp && dialogGridFor(fp);
+      if (!m || !g || m.cols !== g.cols || m.rows !== g.rows
+          || !segMergeGroups(m, g.cols, g.rows).length) {
         if (m && m.groups && m.groups.length) dropped = true;
         delete _segMerges[id];
       }
@@ -4822,6 +4909,7 @@
       ? currentOpts.segGranularity : segGranularityPref;
     if (currentOpts.segCols > 0) opts.segCols = currentOpts.segCols;
     if (currentOpts.segRows > 0) opts.segRows = currentOpts.segRows;
+    if (currentOpts.segGrids) opts.segGrids = currentOpts.segGrids;
     if (currentOpts.cropBoxes) opts.cropBoxes = currentOpts.cropBoxes;
     if (currentOpts.segMerges) opts.segMerges = currentOpts.segMerges;
     // Whatever was saved, with anything changed this session on top.
@@ -5544,7 +5632,7 @@
     if (!keyHtml) keyHtml = antennaKeyHtml(opts, aps, ctx);
 
     if (opts.segmented) {
-      var grid = computeAntennaGrid(W, H, aps, opts, fp.metersPerUnit);
+      var grid = computeAntennaGrid(W, H, aps, opts, fp.metersPerUnit, fp.id);
       if (grid.cols * grid.rows > 1) {
         opts.cropBox = (opts.cropBoxes && opts.cropBoxes[fp.id]) || null;
         opts.segMerge = (opts.segMerges && opts.segMerges[fp.id]) || null;
@@ -5612,10 +5700,9 @@
 
      Without a scale there is no honest way to know how big a building is, so
      the count falls back to AP density alone, which needs none. */
-  function computeAntennaGrid(W, H, aps, opts, mPerUnit) {
-    var userCols = parseInt(opts && opts.segCols, 10);
-    var userRows = parseInt(opts && opts.segRows, 10);
-    if (userCols > 0 && userRows > 0) return { cols: userCols, rows: userRows };
+  function computeAntennaGrid(W, H, aps, opts, mPerUnit, floorId) {
+    var fixed = floorGridSize(opts, floorId);
+    if (fixed) return fixed;
     var byDensity = Math.ceil(aps.length / SEG_APS_PER_PAGE) || 1;
     var bySize = 1;
     var scale = (typeof mPerUnit === 'number' && mPerUnit > 0) ? mPerUnit : 0;
@@ -5628,6 +5715,21 @@
     var cols = Math.max(1, Math.round(Math.sqrt(target * (W / H))));
     var rows = Math.max(1, Math.ceil(target / cols));
     return { cols: cols, rows: rows };
+  }
+
+  /* The columns and rows somebody set for one floor, or null when nobody did.
+     A floor's own entry wins over the project-wide size, which only exists
+     in a project saved by an earlier version or started from the last size set
+     elsewhere. Without a floor id only the project-wide size can apply. */
+  function floorGridSize(opts, floorId) {
+    var own = opts && opts.segGrids && floorId != null ? opts.segGrids[floorId] : null;
+    var c = parseInt(own ? own.cols : opts && opts.segCols, 10);
+    var r = parseInt(own ? own.rows : opts && opts.segRows, 10);
+    if (own && !(c > 0 && r > 0)) {
+      c = parseInt(opts.segCols, 10);
+      r = parseInt(opts.segRows, 10);
+    }
+    return (c > 0 && r > 0) ? { cols: c, rows: r } : null;
   }
 
   function segCellLabel(col, row) {
@@ -10023,7 +10125,7 @@
         parts.push('No floor plan image in the project');
       } else if (opts.segmented && fp.id !== '_none') {
         var W = fp.width || 1, H = fp.height || 1;
-        var grid = computeAntennaGrid(W, H, byFloor[fp.id], opts, fp.metersPerUnit);
+        var grid = computeAntennaGrid(W, H, byFloor[fp.id], opts, fp.metersPerUnit, fp.id);
         if (grid.cols * grid.rows > 1) {
           // Counted the way the floor prints: empty sections are skipped and
           // combined ones are one sheet, so cols × rows overstated it.

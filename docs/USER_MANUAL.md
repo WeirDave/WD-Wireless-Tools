@@ -1555,25 +1555,33 @@ Placement Map, on by default on AP Installation.
    building, say), press **Combine cells**, click the cells, then **Combine
    selected**. They must form a rectangle. A full column takes its letter
    (A); anything else is named by its corners (A1–B2). Click a combined
-   section and **Split** to undo. Changing the column or row count clears
-   combined sections.
-4. Press **Apply** for this floor, or **Apply to All Floors** to copy the
-   position to every floor, then check each floor from the list.
+   section and **Split** to undo. Changing the column or row count on a floor
+   clears that floor's combined sections.
+4. Press **Apply** for this floor, or **Apply to All Floors** to copy this
+   floor's crop, columns and rows, and combined sections to every floor, then
+   check each floor from the list.
 5. Press **Done**.
 
-**Reset to Auto**, **Reset Grid** and **Reset Zoom** start over. Scroll to
-zoom; hold `Space` and drag to pan.
+**Each floor has its own columns and rows.** The numbers shown are for the
+floor selected in the list; a mezzanine over part of the building can be cut
+into fewer sections than the floor under it. A floor nobody has changed stays
+automatic. The **Configure grid…** button reads the size when every floor
+has the same one, *Auto* when none has been set, and *Per floor* otherwise.
+
+**Reset to Auto**, **Reset Grid** and **Reset Zoom** start over; **Reset to
+Auto** affects only the floor on screen. Scroll to zoom; hold `Space` and drag to pan.
 
 **The grid is remembered.** Pressing **Done** saves it for the project: the
-columns and rows, each floor's crop box and the combined sections. Picking
-another report, or closing the file and opening it again, brings it back, and
+columns and rows of each floor, each floor's crop box and the combined
+sections. Picking another report, or closing the file and opening it again, brings it back, and
 a line under the **Configure grid…** button says *Remembered for this
-project.* A project that has never been set up starts from the last columns ×
-rows set on any project (*Starts from the last grid size you set.*). Crops and
+project.* A project that has never been set up starts from the last size remembered
+by an earlier version, if there is one (*Starts from the last grid size you
+set.*); sizes set per floor are not carried to another project. Crops and
 combined sections are never copied to another project. A saved crop is skipped,
 with a message, when it would leave an AP off the section sheets, which can
 happen after the project is revised in Ekahau. **Reset to Auto**, then
-**Done**, returns the project to Auto and keeps it there. The grid is stored on
+**Done**, returns that floor to Auto and keeps it there. The grid is stored on
 this computer beside the column grid file, not in the `.esx`.
 
 ### Column grid references
